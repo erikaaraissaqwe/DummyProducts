@@ -1,10 +1,10 @@
 package br.edu.ifsp.scl.sdm.dummyproducts.ui
 
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.os.Bundle
 import android.view.View
 import android.widget.AdapterView
+import android.widget.ImageView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -12,15 +12,13 @@ import br.edu.ifsp.scl.sdm.dummyproducts.R
 import br.edu.ifsp.scl.sdm.dummyproducts.adapter.ProductAdapter
 import br.edu.ifsp.scl.sdm.dummyproducts.adapter.ProductImageAdapter
 import br.edu.ifsp.scl.sdm.dummyproducts.databinding.ActivityMainBinding
+import br.edu.ifsp.scl.sdm.dummyproducts.model.DummyJsonAPI
 import br.edu.ifsp.scl.sdm.dummyproducts.model.Product
 import br.edu.ifsp.scl.sdm.dummyproducts.model.ProductsList
+import com.android.volley.Request
+import com.android.volley.toolbox.ImageRequest
+import com.android.volley.toolbox.StringRequest
 import com.google.gson.Gson
-import java.io.BufferedInputStream
-import java.io.IOException
-import java.io.InputStreamReader
-import java.net.HttpURLConnection
-import java.net.HttpURLConnection.HTTP_OK
-import java.net.URL
 
 class MainActivity : AppCompatActivity() {
     private val amb: ActivityMainBinding by lazy {
@@ -83,65 +81,39 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun retrieveProductsImages(product: Product) {
-        Thread {
-            product.images.forEach { imageUrl ->
-                val imageConnection = URL(imageUrl)
-                    .openConnection() as HttpURLConnection
-
-                try {
-                    if (imageConnection.responseCode == HTTP_OK) {
-
-                        BufferedInputStream(imageConnection.inputStream).let {
-                            val imageBitmap = BitmapFactory.decodeStream(it)
-
-                            runOnUiThread {
-                                productImageList.add(imageBitmap)
-                                productImageAdapter.notifyItemInserted(productImageList.lastIndex)
-                            }
-                        }
-                    } else {
-                        runOnUiThread {
-                            Toast.makeText(
-                                this,
-                                getString(R.string.request_problem),
-                                Toast.LENGTH_SHORT
-                            ).show()
-                        }
-                    }
-                } catch (e: IOException) {
-                    runOnUiThread { Toast.makeText(this, e.message, Toast.LENGTH_SHORT).show() }
-                } catch (e: Exception) {
-                    runOnUiThread { Toast.makeText(this, e.message, Toast.LENGTH_SHORT).show() }
-                } finally {
-                    imageConnection.disconnect()
-                }
+        product.images.forEach { imageUrl ->
+            ImageRequest(
+                imageUrl,
+                { response ->
+                productImageList.add(response)
+                productImageAdapter.notifyItemInserted(productImageList.lastIndex)
+            },
+                0,
+                0,
+                ImageView.ScaleType.CENTER,
+                Bitmap.Config.ARGB_8888,
+                {
+                Toast.makeText(this, getString(R.string.request_problem), Toast.LENGTH_SHORT).show()
+            })
+                .also {
+                DummyJsonAPI.getInstance(this).addToRequestQueue(it)
             }
-        }.start()
+        }
     }
 
-    private fun retrieveProducts(){
-        Thread{
-            val productsConnection = URL(PRODUCTS_ENDPOINT)
-                .openConnection() as HttpURLConnection
-
-            try {
-                if(productsConnection.responseCode == HTTP_OK){
-
-                    InputStreamReader(productsConnection.inputStream).readText().let{
-                        runOnUiThread{
-                            productAdapter.addAll(Gson().fromJson(it, ProductsList::class.java).products)
-
-                        }
-                    }
+    private fun retrieveProducts() {
+        StringRequest(Request.Method.GET, PRODUCTS_ENDPOINT,
+            {
+                response ->
+                Gson().fromJson(response, ProductsList::class.java).products.also{
+                    productAdapter.addAll(it)
                 }
-                else{
-                    runOnUiThread{ Toast.makeText(this, getString(R.string.request_problem), Toast.LENGTH_SHORT).show()}
-                }
-            } catch (e:IOException){
-                runOnUiThread{Toast.makeText(this, e.message, Toast.LENGTH_SHORT).show()}
-            } finally {
-                productsConnection.disconnect()
-            }
-        }.start()
+            },{
+                Toast.makeText(this, getString(R.string.request_problem), Toast.LENGTH_SHORT).show()
+            }).also{
+                DummyJsonAPI.getInstance(this).addToRequestQueue(it)
+        }
+
     }
+
 }
